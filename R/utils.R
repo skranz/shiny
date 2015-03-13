@@ -75,7 +75,7 @@ withTemporary <- function(env, x, value, expr, unset = FALSE) {
 withPrivateSeed <- function(expr) {
   withTemporary(.GlobalEnv, ".Random.seed",
     .globals$ownSeed, unset=is.null(.globals$ownSeed), {
-      tryCatch({
+      shinyTryCatch({
         expr
       }, finally = {
         .globals$ownSeed <- getExists('.Random.seed', 'numeric', globalenv())
@@ -600,7 +600,7 @@ Callbacks <- R6Class(
         if (is.null(onError)) {
           callback(...)
         } else {
-          tryCatch(callback(...), error = onError)
+          shinyTryCatch(callback(...), error = onError)
         }
       }
     },
@@ -703,7 +703,7 @@ grep2 <- function(pattern, x, ignore.case = FALSE, fixed = FALSE, ...) {
   }
   # when the user types in the search box, the regular expression may not be
   # complete before it is sent to the server, in which case we do not search
-  if (!fixed && inherits(try(grep(pattern, ''), silent = TRUE), 'try-error'))
+  if (!fixed && inherits(shinyTry(grep(pattern, ''), silent = TRUE), 'try-error'))
     return(seq_along(x))
   grep(pattern, x, ignore.case = ignore.case, fixed = fixed, ...)
 }

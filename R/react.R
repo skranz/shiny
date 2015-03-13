@@ -18,14 +18,24 @@ Context <- R6Class(
     },
     run = function(func) {
       "Run the provided function under this context."
-      withReactiveDomain(.domain, {
-        env <- .getReactiveEnvironment()
-        .graphEnterContext(id)
-        tryCatch(
-          env$runWith(self, func),
-          finally = .graphExitContext(id)
-        )
-      })
+
+      catch.errors = !identical(getOption("shiny.catch.errors"),FALSE)
+      if (catch.errors) {
+        withReactiveDomain(.domain, {
+          env <- .getReactiveEnvironment()
+          .graphEnterContext(id)
+          shinyTryCatch(
+            env$runWith(self, func),
+            finally = .graphExitContext(id)
+          )
+        })
+      } else {
+        withReactiveDomain(.domain, {
+          env <- .getReactiveEnvironment()
+          .graphEnterContext(id)
+          env$runWith(self, func)
+        })
+      }
     },
     invalidate = function() {
       "Invalidate this context. It will immediately call the callbacks

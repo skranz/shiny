@@ -378,7 +378,7 @@ Observable <- R6Class(
       on.exit(.running <<- wasRunning)
 
       ctx$run(function() {
-        result <- withVisible(try(shinyCallingHandlers(.func()), silent=TRUE))
+        result <- withVisible(shinyTry(shinyCallingHandlers(.func()), silent=TRUE))
         .visible <<- result$visible
         .value <<- result$value
       })
@@ -494,13 +494,18 @@ Observer <- R6Class(
              "only functions without parameters can be reactive.")
 
       .func <<- function() {
-        tryCatch(
-          func(),
-          validation = function(e) {
-            # It's OK for a validation error to cause an observer to stop
-            # running
-          }
-        )
+        catch.errors = !identical(getOption("shiny.catch.errors"),FALSE)
+        if (catch.errors) {
+          shinyTryCatch(
+            func(),
+            validation = function(e) {
+              # It's OK for a validation error to cause an observer to stop
+              # running
+            }
+          )
+        } else {
+          func()
+        }
       }
       .label <<- label
       .domain <<- domain
@@ -538,27 +543,36 @@ Observer <- R6Class(
       })
 
       ctx$onFlush(function() {
-        tryCatch({
-          if (!.destroyed)
-            run()
+        catch.errors = !identical(getOption("shiny.catch.errors"),FALSE)
 
-        }, error = function(e) {
-          # A function to handle errors that occur during a flush
-          flushErrorHandler <- getOption('shiny.observer.error')
+        if (catch.errors) {
+          shinyTryCatch({
+            if (!.destroyed)
+              run()
 
-          # Default handler function, if not available from global option
-          if (is.null(flushErrorHandler)) {
-            flushErrorHandler <- function(e, label, domain) {
-              warning("Unhandled error in observer: ",
-                e$message, "\n", label, immediate. = TRUE, call. = FALSE)
-              if (!is.null(domain)) {
-                domain$unhandledError(e)
+          }, error = function(e) {
+            # A function to handle errors that occur during a flush
+            flushErrorHandler <- getOption('shiny.observer.error')
+
+            # Default handler function, if not available from global option
+            if (is.null(flushErrorHandler)) {
+              flushErrorHandler <- function(e, label, domain) {
+                warning("Unhandled error in observer: ",
+                  e$message, "\n", label, immediate. = TRUE, call. = FALSE)
+                if (!is.null(domain)) {
+                  domain$unhandledError(e)
+                }
               }
             }
-          }
 
-          flushErrorHandler(e, .label, .domain)
-        })
+            flushErrorHandler(e, .label, .domain)
+          })
+        } else {
+          if (!.destroyed)
+            run()
+        }
+
+
       })
 
       return(ctx)

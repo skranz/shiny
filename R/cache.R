@@ -19,7 +19,7 @@ CacheContext <- R6Class(
 
       mtime <- file.info(file)$mtime
       .tests <<- c(.tests, function() {
-        newMtime <- try(file.info(file)$mtime, silent=TRUE)
+        newMtime <- shinyTry(file.info(file)$mtime, silent=TRUE)
         if (inherits(newMtime, 'try-error'))
           return(TRUE)
         return(!identical(mtime, newMtime))

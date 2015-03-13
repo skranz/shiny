@@ -244,8 +244,13 @@ decodeMessage <- function(data) {
 
   if (readInt(1) != 0x01020202L) {
     # use native encoding for the message
-    nativeData <- iconv(rawToChar(data), 'UTF-8')
-    return(fromJSON(nativeData, asText=TRUE, simplify=FALSE))
+    charData <- rawToChar(data)
+    Encoding(charData) <- 'UTF-8'
+    if (is.na(charData)) {
+      #restore.point("fromJSON1")
+      #stop()
+    }
+    return(fromJSON(charData, asText=TRUE, simplify=FALSE))
   }
 
   i <- 5
@@ -565,6 +570,10 @@ serviceApp <- function() {
 #'   application. If set to \code{"normal"}, displays the application normally.
 #'   Defaults to \code{"auto"}, which displays the application in the mode
 #'   given in its \code{DESCRIPTION} file, if any.
+#' @param catch.errors Default is TRUE. Setting to FALSE can
+#'   facilitate debugging since traceback() is more informative when an error
+#'   arises.
+#'
 #'
 #' @examples
 #' \dontrun{
@@ -594,7 +603,11 @@ runApp <- function(appDir=getwd(),
                                             interactive()),
                    host=getOption('shiny.host', '127.0.0.1'),
                    workerId="", quiet=FALSE,
-                   display.mode=c("auto", "normal", "showcase")) {
+                   display.mode=c("auto", "normal", "showcase"),
+                   catch.errors = TRUE
+                   ) {
+
+  options(shiny.catch.errors=catch.errors)
   on.exit({
     handlerManager$clear()
   }, add = TRUE)
@@ -674,7 +687,7 @@ runApp <- function(appDir=getwd(),
       }
 
       # Test port to see if we can use it
-      tmp <- try(startServer(host, port, list()), silent=TRUE)
+      tmp <- shinyTry(startServer(host, port, list()), silent=TRUE)
       if (!inherits(tmp, 'try-error')) {
         stopServer(tmp)
         .globals$lastPort <- port
@@ -716,13 +729,23 @@ runApp <- function(appDir=getwd(),
 
   .globals$retval <- NULL
   .globals$stopped <- FALSE
-  shinyCallingHandlers(
+
+  if (catch.errors) {
+    shinyCallingHandlers(
+      while (!.globals$stopped) {
+        serviceApp()
+        Sys.sleep(0.001)
+      }
+    )
+
+  # Don't catch errors. Simplifies debugging since we get
+  # a more informative traceback.
+  } else {
     while (!.globals$stopped) {
       serviceApp()
       Sys.sleep(0.001)
     }
-  )
-
+  }
   return(.globals$retval)
 }
 

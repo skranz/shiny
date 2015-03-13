@@ -50,9 +50,9 @@ plotPNG <- function(func, filename=tempfile(fileext='.png'),
   # guarantee user's code in func() will not trigger the error -- they may have
   # to set par(mar = smaller_value) before they draw base graphics.
   op <- par(mar = rep(0, 4))
-  tryCatch(plot.new(), finally = par(op))
+  shinyTryCatch(plot.new(), finally = par(op))
   dv <- dev.cur()
-  tryCatch(shinyCallingHandlers(func()), finally = dev.off(dv))
+  shinyTryCatch(shinyCallingHandlers(func()), finally = dev.off(dv))
 
   filename
 }

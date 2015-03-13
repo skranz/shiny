@@ -1,6 +1,39 @@
 #' @include utils.R stack.R
 NULL
 
+
+#' Internal function
+shinyTry <- function(expr,...) {
+  withRestarts(
+    withCallingHandlers(expr,
+                        error = function(e) {
+                          error  = e
+                          calls  = sys.calls()
+                          frames = sys.frames()
+                          invokeRestart("myAbort", e, calls, frames)
+                        }),
+    myAbort = function(e, calls, frames){
+      err = list(error = e, calls=calls, frames=frames)
+      err.str = paste0(as.character(e), collapse="\n")
+      err.str = substring(err.str, 1,100)
+      #browser()
+      call.names = sapply(err$calls, function(x) {
+        deparse(x,width.cutoff=200,nlines=1)
+      })
+      call.names = rev(call.names)[4:min(7,length(call.names))]
+      message("\n",err.str)
+      message("\n",paste0(seq_along(call.names),": ", call.names,collapse="\n"))
+      stop()
+    }
+  )
+}
+
+#' Internal function
+shinyTryCatch <- function(expr,...) {
+  shinyTry(expr)
+}
+
+
 #' Web Application Framework for R
 #'
 #' Shiny makes it incredibly easy to build interactive web applications with R.
@@ -300,7 +333,7 @@ ShinySession <- R6Class(
       session$.impl             <<- self
 
       if (!is.null(websocket$request$HTTP_SHINY_SERVER_CREDENTIALS)) {
-        try({
+        shinyTry({
           creds <- fromJSON(websocket$request$HTTP_SHINY_SERVER_CREDENTIALS)
           session$user <<- creds$user
           session$groups <<- creds$groups
@@ -396,26 +429,30 @@ ShinySession <- R6Class(
 
         obs <- observe({
 
-          value <- try(
-            {
-              tryCatch(
-                shinyCallingHandlers(func()),
-                shiny.silent.error = function(cond) {
-                  # Don't let shiny.silent.error go through the normal stop
-                  # path of try, because we don't want it to print. But we
-                  # do want to try to return the same looking result so that
-                  # the code below can send the error to the browser.
-                  structure(
-                    NULL,
-                    class = "try-error",
-                    condition = cond
-                  )
-                }
-              )
-            },
-            silent=FALSE
-          )
-
+          catch.errors = !identical(getOption("shiny.catch.errors"),FALSE)
+          if (catch.errors) {
+            value <- shinyTry(
+              {
+                shinyTryCatch(
+                  shinyCallingHandlers(func()),
+                  shiny.silent.error = function(cond) {
+                    # Don't let shiny.silent.error go through the normal stop
+                    # path of try, because we don't want it to print. But we
+                    # do want to try to return the same looking result so that
+                    # the code below can send the error to the browser.
+                    structure(
+                      NULL,
+                      class = "try-error",
+                      condition = cond
+                    )
+                  }
+                )
+              },
+              silent=FALSE
+            )
+          } else {
+            value <- shinyCallingHandlers(func())
+          }
           .invalidatedOutputErrors$remove(name)
           .invalidatedOutputValues$remove(name)
 
@@ -499,17 +536,24 @@ ShinySession <- R6Class(
       method <- paste('@', msg$method, sep='')
       # we must use $ instead of [[ here at the moment; see
       # https://github.com/rstudio/shiny/issues/274
-      func <- try(do.call(`$`, list(self, method)), silent=TRUE)
-      if (inherits(func, 'try-error')) {
-        .sendErrorResponse(msg, paste('Unknown method', msg$method))
-      }
+      catch.errors = !identical(getOption("shiny.catch.errors"),FALSE)
+      if (catch.errors) {
+        func <- shinyTry(do.call(`$`, list(self, method)), silent=TRUE)
+        if (inherits(func, 'try-error')) {
+          .sendErrorResponse(msg, paste('Unknown method', msg$method))
+        }
 
-      value <- try(do.call(func, as.list(append(msg$args, msg$blobs))),
-                   silent=TRUE)
-      if (inherits(value, 'try-error')) {
-        .sendErrorResponse(msg, conditionMessage(attr(value, 'condition')))
-      }
-      else {
+        value <- shinyTry(do.call(func, as.list(append(msg$args, msg$blobs))),
+                     silent=TRUE)
+        if (inherits(value, 'try-error')) {
+          .sendErrorResponse(msg, conditionMessage(attr(value, 'condition')))
+        }
+        else {
+          .sendResponse(msg, value)
+        }
+      } else {
+        func <- do.call(`$`, list(self, method))
+        value <- do.call(func, as.list(append(msg$args, msg$blobs)))
         .sendResponse(msg, value)
       }
     },
@@ -697,7 +741,7 @@ ShinySession <- R6Class(
         }
 
         tmpdata <- tempfile()
-        result <- try(Context$new(getDefaultReactiveDomain(), '[download]')$run(
+        result <- shinyTry(Context$new(getDefaultReactiveDomain(), '[download]')$run(
           function() { download$func(tmpdata) }
         ))
         if (inherits(result, 'try-error')) {

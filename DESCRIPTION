@@ -21,7 +21,8 @@ Imports:
     xtable,
     digest,
     htmltools (>= 0.2.6),
-    R6 (>= 2.0)
+    R6 (>= 2.0),
+    restorepoint
 Suggests:
     datasets,
     Cairo (>= 1.5-5),
@@ -63,3 +64,4 @@ Collate:
     'tar.R'
     'timer.R'
     'update-input.R'
+    'myFromJSON.r'
